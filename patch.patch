@@ -1,0 +1,23 @@
+From 5188957a315f664d46ff58fedecbc0f7503f1b22 Mon Sep 17 00:00:00 2001
+From: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+Date: Mon, 13 Apr 2020 10:32:59 +0200
+Subject: Linux 4.9.219
+
+---
+ Makefile | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Makefile b/Makefile
+index 1a491b3afc0c..26ad7b28a193 100644
+--- a/Makefile
++++ b/Makefile
+@@ -1,6 +1,6 @@
+ VERSION = 4
+ PATCHLEVEL = 9
+-SUBLEVEL = 218
++SUBLEVEL = 219
+ EXTRAVERSION =
+ NAME = Roaring Lionus
+ 
+-- 
+cgit 1.2-0.3.lf.el7
