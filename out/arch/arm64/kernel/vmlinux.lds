@@ -4,7 +4,11 @@
 /*
  *
  * Automatically generated file; DO NOT EDIT.
+<<<<<<< HEAD
  * Linux/arm64 4.4.219 Kernel Configuration
+=======
+ * Linux/arm64 4.4.218 Kernel Configuration
+>>>>>>> 6c96c79c357fd5d8cca4b3cb1a75ef96bd86a628
  *
  */
 
