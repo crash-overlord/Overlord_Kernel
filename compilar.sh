@@ -1,8 +1,8 @@
 #!/bin/bash
 echo "Limpiando basura de la ultima Compilacion"
 make clean && make mrproper
-rm="${KERNEL_DIR}/out/arch/arm64/boot/Image.gz-dtb"
-rm="${KERNEL_DIR}/out/arch/arm64/boot/*.gz"
+rm out/arch/arm64/boot/Image.gz-dtb
+rm out/arch/arm64/boot/*.gz
 
 echo "Agregando compiladores y variables"
 KERNEL_DIR=$(pwd)
@@ -29,19 +29,26 @@ make -j$(nproc) O=out \
 echo "Limpiando y copiando imagen a Anykernel"
 
 echo "Limpiando"
-rm="/home/crash-overlord/Overlord-Kernel/toolchains/AnyKernel/Image.gz-dtb"
-echo"Copiando imagen"
-cp="${KERNEL_DIR}/out/arch/arm64/boot/Image.gz-dtb /home/crash-overlord/Overlord-Kernel/toolchains/AnyKernel/"
+rm /home/crash-overlord/Overlord-Kernel/toolchains/AnyKernel/Image.gz-dtb
+rm /home/crash-overlord/Overlord-Kernel/toolchains/AnyKernel/*.zip
+echo "Copiando imagen"
+cp out/arch/arm64/boot/Image.gz-dtb /home/crash-overlord/Overlord-Kernel/toolchains/AnyKernel/
 
 echo "Compilando zip Overlord-Kernel"
 cd /home/crash-overlord/Overlord-Kernel/toolchains/AnyKernel/
 make
-cd /home/crash-overlord/Overlord-Kernel/Old-cam-new-sources/kernel/
+cd ..
+cd ..
+cd Old-cam-new-sources/Overlord_Kernel/out
 
 echo "Limpiando basura de la ultima Compilacion"
-make clean && make mrproper
-rm="${KERNEL_DIR}/out/arch/arm64/boot/Image.gz-dtb"
-rm="${KERNEL_DIR}/out/arch/arm64/boot/*.gz"
+make clean
+make mrproper
+cd ..
+make clean
+make mrproper
+rm out/arch/arm64/boot/Image.gz-dtb
+rm out/arch/arm64/boot/*.gz
 
 echo "organizando git"
 git add .
