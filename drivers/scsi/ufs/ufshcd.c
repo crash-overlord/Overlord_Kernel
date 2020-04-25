@@ -38,146 +38,10 @@
  */
 
 #include <linux/async.h>
-#include <scsi/ufs/ioctl.h>
 #include <linux/devfreq.h>
-#include <linux/nls.h>
-#include <linux/of.h>
-#include <linux/blkdev.h>
-#include <asm/unaligned.h>
 
 #include "ufshcd.h"
-#include "ufshci.h"
-#include "ufs_quirks.h"
-#include "ufs-debugfs.h"
-#include "ufs-qcom.h"
-
-#define CREATE_TRACE_POINTS
-#include <trace/events/ufs.h>
-
-#ifdef CONFIG_DEBUG_FS
-
-static int ufshcd_tag_req_type(struct request *rq)
-{
-	int rq_type = TS_WRITE;
-
-	if (!rq || !(rq->cmd_type & REQ_TYPE_FS))
-		rq_type = TS_NOT_SUPPORTED;
-	else if (rq->cmd_flags & REQ_FLUSH)
-		rq_type = TS_FLUSH;
-	else if (rq_data_dir(rq) == READ)
-		rq_type = (rq->cmd_flags & REQ_URGENT) ?
-			TS_URGENT_READ : TS_READ;
-	else if (rq->cmd_flags & REQ_URGENT)
-		rq_type = TS_URGENT_WRITE;
-
-	return rq_type;
-}
-
-static void ufshcd_update_error_stats(struct ufs_hba *hba, int type)
-{
-	ufsdbg_set_err_state(hba);
-	if (type < UFS_ERR_MAX)
-		hba->ufs_stats.err_stats[type]++;
-}
-
-static void ufshcd_update_tag_stats(struct ufs_hba *hba, int tag)
-{
-	struct request *rq =
-		hba->lrb[tag].cmd ? hba->lrb[tag].cmd->request : NULL;
-	u64 **tag_stats = hba->ufs_stats.tag_stats;
-	int rq_type;
-
-	if (!hba->ufs_stats.enabled)
-		return;
-
-	tag_stats[tag][TS_TAG]++;
-	if (!rq || !(rq->cmd_type & REQ_TYPE_FS))
-		return;
-
-	WARN_ON(hba->ufs_stats.q_depth > hba->nutrs);
-	rq_type = ufshcd_tag_req_type(rq);
-	if (!(rq_type < 0 || rq_type > TS_NUM_STATS))
-		tag_stats[hba->ufs_stats.q_depth++][rq_type]++;
-}
-
-static void ufshcd_update_tag_stats_completion(struct ufs_hba *hba,
-		struct scsi_cmnd *cmd)
-{
-	struct request *rq = cmd ? cmd->request : NULL;
-
-	if (rq && rq->cmd_type & REQ_TYPE_FS)
-		hba->ufs_stats.q_depth--;
-}
-
-static void update_req_stats(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
-{
-	int rq_type;
-	struct request *rq = lrbp->cmd ? lrbp->cmd->request : NULL;
-	s64 delta = ktime_us_delta(lrbp->complete_time_stamp,
-		lrbp->issue_time_stamp);
-
-	/* update general request statistics */
-	if (hba->ufs_stats.req_stats[TS_TAG].count == 0)
-		hba->ufs_stats.req_stats[TS_TAG].min = delta;
-	hba->ufs_stats.req_stats[TS_TAG].count++;
-	hba->ufs_stats.req_stats[TS_TAG].sum += delta;
-	if (delta > hba->ufs_stats.req_stats[TS_TAG].max)
-		hba->ufs_stats.req_stats[TS_TAG].max = delta;
-	if (delta < hba->ufs_stats.req_stats[TS_TAG].min)
-			hba->ufs_stats.req_stats[TS_TAG].min = delta;
-
-	rq_type = ufshcd_tag_req_type(rq);
-	if (rq_type == TS_NOT_SUPPORTED)
-		return;
-
-	/* update request type specific statistics */
-	if (hba->ufs_stats.req_stats[rq_type].count == 0)
-		hba->ufs_stats.req_stats[rq_type].min = delta;
-	hba->ufs_stats.req_stats[rq_type].count++;
-	hba->ufs_stats.req_stats[rq_type].sum += delta;
-	if (delta > hba->ufs_stats.req_stats[rq_type].max)
-		hba->ufs_stats.req_stats[rq_type].max = delta;
-	if (delta < hba->ufs_stats.req_stats[rq_type].min)
-			hba->ufs_stats.req_stats[rq_type].min = delta;
-}
-
-static void
-ufshcd_update_query_stats(struct ufs_hba *hba, enum query_opcode opcode, u8 idn)
-{
-	if (opcode < UPIU_QUERY_OPCODE_MAX && idn < MAX_QUERY_IDN)
-		hba->ufs_stats.query_stats_arr[opcode][idn]++;
-}
-
-#else
-static inline void ufshcd_update_tag_stats(struct ufs_hba *hba, int tag)
-{
-}
-
-static inline void ufshcd_update_tag_stats_completion(struct ufs_hba *hba,
-		struct scsi_cmnd *cmd)
-{
-}
-
-static inline void ufshcd_update_error_stats(struct ufs_hba *hba, int type)
-{
-}
-
-static inline
-void update_req_stats(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
-{
-}
-
-static inline
-void ufshcd_update_query_stats(struct ufs_hba *hba,
-			       enum query_opcode opcode, u8 idn)
-{
-}
-#endif
-
-#define PWR_INFO_MASK	0xF
-#define PWR_RX_OFFSET	4
-
-#define UFSHCD_REQ_SENSE_SIZE	18
+#include "unipro.h"
 
 #define UFSHCD_ENABLE_INTRS	(UTP_TRANSFER_REQ_COMPL |\
 				 UTP_TASK_REQ_COMPL |\
@@ -191,21 +55,15 @@ void ufshcd_update_query_stats(struct ufs_hba *hba,
 #define NOP_OUT_TIMEOUT    30 /* msecs */
 
 /* Query request retries */
-#define QUERY_REQ_RETRIES 3
+#define QUERY_REQ_RETRIES 10
 /* Query request timeout */
-#define QUERY_REQ_TIMEOUT 1500 /* 1.5 seconds */
+#define QUERY_REQ_TIMEOUT 30 /* msec */
 
 /* Task management command timeout */
 #define TM_CMD_TIMEOUT	100 /* msecs */
 
-/* maximum number of retries for a general UIC command  */
-#define UFS_UIC_COMMAND_RETRIES 3
-
 /* maximum number of link-startup retries */
 #define DME_LINKSTARTUP_RETRIES 3
-
-/* Maximum retries for Hibern8 enter */
-#define UIC_HIBERN8_ENTER_RETRIES 3
 
 /* maximum number of reset retries before giving up */
 #define MAX_HOST_RESET_RETRIES 5
@@ -215,17 +73,6 @@ void ufshcd_update_query_stats(struct ufs_hba *hba,
 
 /* Interrupt aggregation default timeout, unit: 40us */
 #define INT_AGGR_DEF_TO	0x02
-
-/* default value of auto suspend is 3 seconds */
-#define UFSHCD_AUTO_SUSPEND_DELAY_MS 3000 /* millisecs */
-
-#define UFSHCD_CLK_GATING_DELAY_MS_PWR_SAVE	10
-#define UFSHCD_CLK_GATING_DELAY_MS_PERF		50
-
-/* IOCTL opcode for command - ufs set device read only */
-#define UFS_IOCTL_BLKROSET      BLKROSET
-
-#define UFSHCD_DEFAULT_LANES_PER_DIRECTION		2
 
 #define ufshcd_toggle_vreg(_dev, _vreg, _on)				\
 	({                                                              \
@@ -237,9 +84,6 @@ void ufshcd_update_query_stats(struct ufs_hba *hba,
 		_ret;                                                   \
 	})
 
-#define ufshcd_hex_dump(prefix_str, buf, len) \
-print_hex_dump(KERN_ERR, prefix_str, DUMP_PREFIX_OFFSET, 16, 4, buf, len, false)
-
 static u32 ufs_query_desc_max_size[] = {
 	QUERY_DESC_DEVICE_MAX_SIZE,
 	QUERY_DESC_CONFIGURAION_MAX_SIZE,
@@ -250,7 +94,6 @@ static u32 ufs_query_desc_max_size[] = {
 	QUERY_DESC_RFU_MAX_SIZE,
 	QUERY_DESC_GEOMETRY_MAZ_SIZE,
 	QUERY_DESC_POWER_MAX_SIZE,
-	QUERY_DESC_HEALTH_MAX_SIZE,
 	QUERY_DESC_RFU_MAX_SIZE,
 };
 
