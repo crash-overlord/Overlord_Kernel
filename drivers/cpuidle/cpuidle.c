@@ -19,7 +19,6 @@
 #include <linux/ktime.h>
 #include <linux/hrtimer.h>
 #include <linux/module.h>
-#include <linux/slab.h>
 #include <linux/suspend.h>
 #include <linux/tick.h>
 #include <trace/events/power.h>
@@ -108,32 +107,6 @@ void cpuidle_use_deepest_state(bool enable)
 	if (dev)
 		dev->use_deepest_state = enable;
 	preempt_enable();
-}
-
-static void set_uds_callback(void *info)
-{
-	bool enable = *(bool *)info;
-
-	cpuidle_use_deepest_state(enable);
-}
-
-/**
- * cpuidle_use_deepest_state_mask - Set use_deepest_state on specific CPUs.
- * @target: cpumask of CPUs to update use_deepest_state on.
- * @enable: whether to enforce the deepest idle state on those CPUs.
- */
-int cpuidle_use_deepest_state_mask(const struct cpumask *target, bool enable)
-{
-	bool *info = kmalloc(sizeof(bool), GFP_KERNEL);
-
-	if (!info)
-		return -ENOMEM;
-
-	*info = enable;
-	on_each_cpu_mask(target, set_uds_callback, info, 1);
-	kfree(info);
-
-	return 0;
 }
 
 /**
@@ -235,14 +208,13 @@ int cpuidle_enter_state(struct cpuidle_device *dev, struct cpuidle_driver *drv,
 	sched_idle_set_state(target_state, index);
 
 	trace_cpu_idle_rcuidle(index, dev->cpu);
-	time_start = ns_to_ktime(local_clock());
+	time_start = ktime_get();
 
 	stop_critical_timings();
 	entered_state = target_state->enter(dev, drv, index);
 	start_critical_timings();
 
-	sched_clock_idle_wakeup_event();
-	time_end = ns_to_ktime(local_clock());
+	time_end = ktime_get();
 	trace_cpu_idle_rcuidle(PWR_EVENT_EXIT, dev->cpu);
 
 	/* The cpu is no longer idle or about to enter idle. */
@@ -258,7 +230,7 @@ int cpuidle_enter_state(struct cpuidle_device *dev, struct cpuidle_driver *drv,
 	if (!cpuidle_state_is_coupled(drv, index))
 		local_irq_enable();
 
-	diff = ktime_us_delta(time_end, time_start);
+	diff = ktime_to_us(ktime_sub(time_end, time_start));
 	if (diff > INT_MAX)
 		diff = INT_MAX;
 
