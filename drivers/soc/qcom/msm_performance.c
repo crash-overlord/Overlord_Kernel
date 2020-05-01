@@ -26,6 +26,11 @@
 #include <linux/input.h>
 #include <linux/kthread.h>
 
+/*disable if have problems*/
+static int touchboost = 0;
+
+/*disable if have problems*/
+
 static unsigned int use_input_evts_with_hi_slvt_detect;
 static struct mutex managed_cpus_lock;
 
