@@ -1,6 +1,6 @@
 #
 # Automatically generated file; DO NOT EDIT.
-# Linux/arm64 4.4.220 Kernel Configuration
+# Linux/arm64 4.4.221 Kernel Configuration
 #
 CONFIG_ARM64=y
 CONFIG_64BIT=y
@@ -50,7 +50,7 @@ CONFIG_FORCE_FAST_CHARGE=y
 CONFIG_INIT_ENV_ARG_LIMIT=32
 CONFIG_CROSS_COMPILE=""
 # CONFIG_COMPILE_TEST is not set
-CONFIG_LOCALVERSION="-OLK-reloaded-V4-stable-oldcam"
+CONFIG_LOCALVERSION="-Overlord-Kernel-V4-stable-oldcam"
 CONFIG_LOCALVERSION_AUTO=y
 CONFIG_DEFAULT_HOSTNAME="(none)"
 CONFIG_SWAP=y
